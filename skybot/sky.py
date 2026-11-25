@@ -1,5 +1,6 @@
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import datetime, time, timedelta
+from zoneinfo import ZoneInfo
 import math
 
 import astropy.units as u
@@ -25,6 +26,74 @@ MOON_PHASES = (
 class MoonInfo:
     phase: str
     illumination_percent: float
+
+@dataclass(frozen=True)
+class BodySpec:
+    name: str
+    display_name: str
+
+@dataclass(frozen=True)
+class SkySettings:
+    bodies: tuple[BodySpec, ...]
+    minimum_altitude_deg: float
+    sun_altitude_threshold_deg: float
+    time_window_start_hour: int
+    time_window_end_hour: int
+    time_step_minutes: int
+
+@dataclass(frozen=True)
+class VisibilityWindow:
+    start: datetime
+    end: datetime
+    peak_altitude_deg: float
+    peak_direction: str
+
+@dataclass(frozen=True)
+class VisibleBody:
+    name: str
+    display_name: str
+    windows: tuple[VisibilityWindow, ...]
+
+@dataclass(frozen=True)
+class SkyReport:
+    moon: MoonInfo
+    bodies: tuple[VisibleBody, ...]
+
+
+# what does 'tonight' means?
+def _night_window(
+        when: datetime,
+        timezone_name: str,
+        settings: SkySettings,
+) -> tuple[datetime, datetime]:
+    if when.tzinfo is None or when.utcoffset() is None:
+        raise ValueError('when must include a timezone')
+
+    zone = ZoneInfo(timezone_name)
+    local_when = when.astimezone(zone)
+    wraps_midnight = (
+        settings.time_window_end_hour <= settings.time_window_start_hour
+    )
+    start_date = local_when.date()
+
+    if wraps_midnight and local_when.hour < settings.time_window_end_hour:
+        start_date -= timedelta(days=1)
+    elif not wraps_midnight and local_when.hour >= settings.time_window_end_hour:
+        start_date += timedelta(days=1)
+
+    end_date = start_date + timedelta(days=1 if wraps_midnight else 0)
+    start = datetime.combine(
+        start_date,
+        time(hour=settings.time_window_start_hour),
+        tzinfo = zone,
+    )
+    end = datetime.combine(
+        end_date,
+        time(hour=settings.time_window_end_hour),
+        tzinfo=zone,
+    )
+
+    return start, end
 
 # calculate Moon's phase and illuminated percentage
 def moon_info_at(when: datetime) -> MoonInfo:

@@ -1,0 +1,38 @@
+[sky]
+minimum_altitude_deg = 10.0
+sun_altitude_threshold_deg = -6.0
+time_window_start_hour = 18
+time_window_end_hour = 6
+time_step_minutes = 5
+
+[[bodies]]
+name = "Mercury"
+display_name = "Mercurio"
+
+[[bodies]]
+name = "Venus"
+display_name = "Venere"
+
+[[bodies]]
+name = "Mars"
+display_name = "Marte"
+
+[[bodies]]
+name = "Jupiter"
+display_name = "Giove"
+
+[[bodies]]
+name = "Saturn"
+display_name = "Saturno"
+
+[[bodies]]
+name = "Uranus"
+display_name = "Urano"
+
+[[bodies]]
+name = "Neptune"
+display_name = "Nettuno"
+
+[moon]
+name = "Moon"
+display_name = "Luna"

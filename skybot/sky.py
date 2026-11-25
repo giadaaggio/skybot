@@ -11,6 +11,7 @@ from astropy.coordinates import solar_system_ephemeris
 
 iers.conf.auto_download = False
 
+# constants
 MOON_PHASES = (
     'Luna nuova', 
     'Falce crescente',
@@ -21,6 +22,18 @@ MOON_PHASES = (
     'Ultimo quarto',
     'Falce calante',
 )
+
+COMPASS_DIRECTIONS = (
+    'Nord',
+    'Nord-est',
+    'Est',
+    'Sud-est',
+    'Sud',
+    'Sud-ovest',
+    'Ovest',
+    'Nord-ovest',
+)
+COMPASS_SECTOR_WIDTH_DEG = 360. / len(COMPASS_DIRECTIONS)
 
 @dataclass(frozen=True)
 class MoonInfo:
@@ -94,6 +107,68 @@ def _night_window(
     )
 
     return start, end
+
+
+# map an azimuth to an Italian compass direction
+def _compass_direction(azimuth_deg: float) -> str:
+    half_sector = COMPASS_SECTOR_WIDTH_DEG / 2.
+    normalized_azimuth = azimuth_deg % 360.
+    index = int((normalized_azimuth + half_sector) // COMPASS_SECTOR_WIDTH_DEG)
+    return COMPASS_DIRECTIONS[index % len(COMPASS_DIRECTIONS)]
+
+
+# group consecutive vibile samples into visibilty windows
+def _visibility_windows(
+        sample_times: tuple[datetime, ...],
+        body_altitudes_deg: list[float],
+        body_azimuths_deg: list[float],
+        sun_altitudes_deg: list[float],
+        settings: SkySettings,
+) -> tuple[VisibilityWindow, ...]: 
+    sample_count = len(sample_times)
+    if not sample_times or any(
+        len(values) != sample_count 
+        for values in (body_altitudes_deg, body_azimuths_deg, sun_altitudes_deg)
+    ): 
+        raise ValueError('sample times and altitude arrays must have matching lengths')
+
+    visible = [
+        body_altitude > settings.minimum_altitude_deg
+        and sun_altitude < settings.sun_altitude_threshold_deg
+        for body_altitude, sun_altitude in zip(
+            body_altitudes_deg, sun_altitudes_deg, strict = True
+        )
+    ]
+
+    windows: list[VisibilityWindow] = []
+    index = 0 
+    while index < sample_count:
+        if not visible[index]: 
+            index += 1
+            continue
+
+        first_visible = index
+        while index + 1 < sample_count and visible[index + 1]:
+            index += 1
+        last_visible = index
+
+        peak_index = max(
+            range(first_visible, last_visible + 1), 
+            key = lambda sample_index: body_altitudes_deg[sample_index]
+        )
+        end_index = min(last_visible + 1, sample_count - 1)
+        windows.append(
+            VisibilityWindow(
+                start = sample_times[first_visible],
+                end = sample_times[end_index],
+                peak_altitude_deg = body_altitudes_deg[peak_index],
+                peak_direction = _compass_direction(body_azimuths_deg[peak_index]),
+            )
+        )
+        index += 1
+
+    return tuple(windows)
+
 
 # calculate Moon's phase and illuminated percentage
 def moon_info_at(when: datetime) -> MoonInfo:
